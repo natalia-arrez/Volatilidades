@@ -1,0 +1,306 @@
+---
+title: "Volatilidades"
+author: "Natalia Arrez Flores"
+date: "2024-09-30"
+output: html_document
+---
+
+Por favor, calcule la volatilidad convencional (o fija en el tiempo), con suavizamiento exponencial con λ=0.95
+, con suavizamiento exponencial con λ=0.98
+, GARCH (1,1) gaussiano, GARCH (1,1) t-Student y GARCH (1,1) GED. 
+
+Deberá reportar el cálculo para periodicidades diarias y semanales (históricos de 3 años) con pronósticos a t+1 y t+2 en los casos que amerite. Esto implica una tabla de cálculos cuya presentación es de formato libre.
+
+Los cálculos y resultados deberán explicarse en una página web con código. Esta deberá publicarse como la página de un repositorio de GitHub.
+
+```{r setup, include=FALSE}
+#Cargamos las funciones
+
+source("https://raw.githubusercontent.com/OscarVDelatorreTorres/yahooFinance/main/datosMultiplesYahooFinance.R")
+source("https://raw.githubusercontent.com/OscarVDelatorreTorres/riskManagementSuiteR/main/riskManagementSuiteFunctions.R")
+```
+
+#Volatilidad convencional o fija en el tiempo
+
+A continuación se presenta el cálculo de la volatilidad fija en el tiempo de 19 valores de la BMV:
+AC
+ALSEA
+ALFAA
+BBAJIOO
+BIMBOA
+CEMEXCPO
+CHDRAUI*
+FUNO11
+GENTERA*
+GMEXICOB
+GFINBURO
+GFNORTEO
+GMXT*
+GRUMAB
+KIMBERA
+LACOMERUBC
+PINFRA*
+SORIANAB
+WALMEXV
+
+##Volatilidad fija diaria
+
+Primero, cargamos los precios diarios históricos a 3 años en formato Excel:
+
+```{r}
+# Identificadores:
+tickerV=c("AC","ALSEA.MX","ALFAA.MX","BBAJIOO.MX","BIMBOA.MX","CEMEXCPO.MX","CHDRAUIB.MX", "FUNO11.MX", "GENTERA.MX", "GMEXICOB.MX","GFINBURO.MX", "GFNORTEO.MX", "GMXT.MX", "GRUMAB.MX", "KIMBERA.MX", "LACOMERUBC.MX", "PINFRA.MX", "SORIANAB.MX", "WALMEX.MX")
+#Histórico de precio diario de 3 años
+deD="2021-09-30"
+hastaD="2024-09-30"
+per="D"
+#Conversión de los datos de USD A MXN
+paridadFX="USDMXN=X"
+convertirFX=c(TRUE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE)
+# Descargando los datos diarios en un objeto llamado Datos1D:
+Datos1D=historico_multiples_precios(tickers=tickerV,de=deD,hasta=hastaD,periodicidad=per,fxRate=paridadFX,whichToFX=convertirFX)
+write.xlsx(Datos1D$tablaRendimientosC,"Rendimientos1D.xlsx")
+write.xlsx(Datos1D$tablaPreciosFX,"Precios1DF.xlsx")
+```
+```{r}
+library(openxlsx)
+# Datos de rendimientos
+rendimientosVF1=read.xlsx("Rendimientos1D.xlsx")
+# Datos de precios
+preciosVF1=read.xlsx("Precios1DF.xlsx")
+```
+```{r}
+library(DT)
+datatable(rendimientosVF1)
+```
+
+##Cuantificación de la volatilidad fija diaria 
+
+```{r}
+sigmas=apply(rendimientosVF1[,2:ncol(rendimientosVF1)],2,sd)
+sigmas
+```
+##Volatilidad fija semanal
+
+```{r}
+library(openxlsx)
+
+#Histórico de precio semanal de 3 años
+deW="2021-09-30"
+hastaW="2024-09-30"
+per="W"
+
+# Descargando los datos diarios en un objeto llamado Datos1D:
+Datos1W=historico_multiples_precios(tickers=tickerV,de=deW,hasta=hastaW,periodicidad=per,fxRate=paridadFX,whichToFX=convertirFX)
+write.xlsx(Datos1W$tablaRendimientosC,"Rendimientos1W.xlsx")
+write.xlsx(Datos1W$tablaPreciosFX,"Precios1WF.xlsx")
+```
+```{r}
+# Datos de rendimientos
+rendimientosVF2=read.xlsx("Rendimientos1W.xlsx")
+# Datos de precios
+preciosVF2=read.xlsx("Precios1WF.xlsx")
+```
+```{r}
+library(DT)
+datatable(rendimientosVF2)
+```
+```{r}
+sigmas=apply(rendimientosVF2[,2:ncol(rendimientosVF2)],2,sd)
+sigmas
+```
+
+
+
+#Volatilidad diaria con suavizamiento exponencial al 0.98
+
+
+```{r}
+# Vector de rendimientos:
+rendimientosVL1=rendimientosVF1
+# Lambda con el valor deseado:
+lambdaS=0.98
+# Como las primeras filas son las más antiguas y las últimas las de fechas más recientes en la serie de tiempo, se calcula una secuencia que vaya de T a t0. Es decir del lugar de la última observación al lugar de la primera:
+seqT=seq(from=nrow(rendimientosVF1),to=1,by=-1)-1
+
+# Se eleva la lambda a la t-1, según la ecuación (3):
+lambdaT=lambdaS^seqT
+# Se multiplica la lambda suavizada exponencialmente a lo largo de t por los rendimientos al cuadrado:
+rendimientosCuadraticos=(rendimientosVL1^2)*lambdaT
+rendimientosSuavizados=rendimientosCuadraticos*lambdaT
+
+# Se crea la tabla de salida:
+
+tablaSuavizamientoExponencial=data.frame(Fecha=rendimientosVF1$Date,
+                                         lambda=lambdaT, rendimientosCuadraticos=rendimientosCuadraticos, rendimientosSuavizados=rendimientosSuavizados)
+
+datatable(tablaSuavizamientoExponencial,
+                 colnames=c("Fecha","Lambda en t-n","Rendimientos cuadráticos","Rendimientos cuadráticos suavizados"), extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+    scrollX = F
+  ))
+```
+
+
+
+
+```{r}
+# Se calcula la desviación estándar con suavizamiento exponencial:
+
+sigmaExpD=sqrt((1-lambdaS)*sum(rendimientosSuavizados))
+
+tablaSigmas=data.frame(sigmaConvencional=sigmas,sigmaExponencial=sigmaExpD)
+datatable(tablaSigmas)
+```
+```{r}
+# Corre el modelo sigmaEWMA con un nivel de suavizamiento exponencial de 0.98 y con una serie de tiempo con los valores antiguos arriba y los recientes abajo:
+ewSigma=funEWSigma(rendimientosVF1$return,lambda=0.98,upDown=TRUE)
+ewSigma
+```
+##Volatilidad diaria con suavizamiento exponencial al 0.95
+
+```{r}
+# Vector de rendimientos:
+rendimientosVL1=rendimientosVF1
+# Lambda con el valor deseado:
+lambdaS=0.95
+# Como las primeras filas son las más antiguas y las últimas las de fechas más recientes en la serie de tiempo, se calcula una secuencia que vaya de T a t0. Es decir del lugar de la última observación al lugar de la primera:
+seqT=seq(from=nrow(rendimientosVF1),to=1,by=-1)-1
+
+# Se eleva la lambda a la t-1, según la ecuación (3):
+lambdaT=lambdaS^seqT
+# Se multiplica la lambda suavizada exponencialmente a lo largo de t por los rendimientos al cuadrado:
+rendimientosCuadraticos=(rendimientosVL1^2)*lambdaT
+rendimientosSuavizados=rendimientosCuadraticos*lambdaT
+
+# Se crea la tabla de salida:
+
+tablaSuavizamientoExponencial=data.frame(Fecha=rendimientosVF1$Date,
+                                         lambda=lambdaT, rendimientosCuadraticos=rendimientosCuadraticos, rendimientosSuavizados=rendimientosSuavizados)
+
+datatable(tablaSuavizamientoExponencial,
+                 colnames=c("Fecha","Lambda en t-n","Rendimientos cuadráticos","Rendimientos cuadráticos suavizados"), extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+    scrollX = F
+  ))
+```
+
+
+
+```{r}
+# Desviación estándar con suavizamiento exponencial:
+
+sigmaExpW=sqrt((1-lambdaS)*sum(rendimientosSuavizados))
+
+tablaSigmas=data.frame(sigmaConvencional=sigmas,sigmaExponencial=sigmaExpD)
+datatable(tablaSigmas)
+```
+
+## Volatilidad semanal con suavizamiento exponencial al 0.98
+
+```{r}
+# Vector de rendimientos:
+rendimientosVL2=rendimientosVF2
+# Lambda con el valor deseado:
+lambdaS=0.98
+# Como las primeras filas son las más antiguas y las últimas las de fechas más recientes en la serie de tiempo, se calcula una secuencia que vaya de T a t0. Es decir del lugar de la última observación al lugar de la primera:
+seqT=seq(from=nrow(rendimientosVF2),to=1,by=-1)-1
+
+# Se eleva la lambda a la t-1, según la ecuación (3):
+lambdaT=lambdaS^seqT
+# Se multiplica la lambda suavizada exponencialmente a lo largo de t por los rendimientos al cuadrado:
+rendimientosCuadraticos=(rendimientosVL2^2)*lambdaT
+rendimientosSuavizados=rendimientosCuadraticos*lambdaT
+
+# Se crea la tabla de salida:
+
+tablaSuavizamientoExponencial=data.frame(Fecha=rendimientosVF2$Date,
+                                         lambda=lambdaT, rendimientosCuadraticos=rendimientosCuadraticos, rendimientosSuavizados=rendimientosSuavizados)
+
+datatable(tablaSuavizamientoExponencial,
+                 colnames=c("Fecha","Lambda en t-n","Rendimientos cuadráticos","Rendimientos cuadráticos suavizados"), extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+    scrollX = F
+  ))
+```
+```{r}
+sigmaExpW=sqrt((1-lambdaS)*sum(rendimientosSuavizados))
+
+tablaSigmas=data.frame(sigmaConvencional=sigmas,sigmaExponencial=sigmaExpW)
+datatable(tablaSigmas)
+```
+
+
+
+#Volatilidad GARCH
+
+###GARCH 11 GAUSSIANO
+```{r}
+library(rugarch)
+# Se crea el objeto spec del modelo GARCH:
+modeloGARCH=ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "norm")
+
+# Se ajusta el modelo GARCH:
+ajusteGARCH=ugarchfit(spec=modeloGARCH, data=rendimientosVF1)
+
+coeficientesGARCH=data.frame(coeficientes=ajusteGARCH@fit$coef,
+                             errores=ajusteGARCH@fit$robust.se.coef,
+                             valoresT=ajusteGARCH@fit$tval,
+                  Pvalues=2*(1-pt(abs(ajusteGARCH@fit$tval),df=nrow(rendimientosVF1)-3))
+                             )
+coeficientesGARCH
+
+```
+```{r}
+# Pronóstico de la volatilidad para los próximos 2 periodos
+pronosticoGARCH <- ugarchforecast(ajusteGARCH, n.ahead = 2)
+
+volatilidad_t1 <- sigma(pronosticoGARCH)[1]  # Volatilidad en t+1
+volatilidad_t2 <- sigma(pronosticoGARCH)[2]  # Volatilidad en t+2
+
+# Volatilidades pronosticadas
+cat("Volatilidad pronosticada para t+1:", volatilidad_t1, "\n")
+cat("Volatilidad pronosticada para t+2:", volatilidad_t2, "\n")
+
+```
+
+### GARCH 11 T STUDENT
+
+
+```{r}
+library(rugarch)
+# Se crea el objeto spec del modelo GARCH:
+modeloGARCH2=ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "std")
+
+# Se ajusta el modelo GARCH:
+ajusteGARCH=ugarchfit(spec=modeloGARCH2, data=rendimientosVF1)
+
+coeficientesGARCH=data.frame(coeficientes=ajusteGARCH@fit$coef,
+                             errores=ajusteGARCH@fit$robust.se.coef,
+                             valoresT=ajusteGARCH@fit$tval,
+                  Pvalues=2*(1-pt(abs(ajusteGARCH@fit$tval),df=nrow(rendimientosVF1)-3))
+                             )
+coeficientesGARCH
+
+```
+
+### GARCH 11 GED
+
+```{r}
+# Se crea el objeto spec del modelo GARCH:
+modeloGARCH3=ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)), mean.model = list(armaOrder = c(0, 0), include.mean = FALSE), distribution.model = "ged")
+
+# Se ajusta el modelo GARCH:
+ajusteGARCH=ugarchfit(spec=modeloGARCH3, data=rendimientosVF1)
+
+coeficientesGARCH=data.frame(coeficientes=ajusteGARCH@fit$coef,
+                             errores=ajusteGARCH@fit$robust.se.coef,
+                             valoresT=ajusteGARCH@fit$tval,
+                  Pvalues=2*(1-pt(abs(ajusteGARCH@fit$tval),df=nrow(rendimientosVF1)-3))
+                             )
+coeficientesGARCH
+```
+
